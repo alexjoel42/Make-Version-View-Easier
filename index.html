@@ -28,7 +28,7 @@
         </header>
 
         <main>
-            <!-- ** NEW: Search Bar ** -->
+            <!-- Search Bar -->
             <div class="max-w-2xl mx-auto mb-6">
                 <input type="text" id="search-bar" placeholder="Search for a release version..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
             </div>
@@ -49,40 +49,58 @@
     </div>
 
     <script>
+        // Main function to fetch and display GitHub releases for the Opentrons repository.
         async function fetchAndDisplayReleases() {
+            // Get references to the DOM elements we'll be manipulating.
             const releasesList = document.getElementById('releases-list');
             const loadingState = document.getElementById('loading-state');
             const searchBar = document.getElementById('search-bar');
 
             try {
+                // Initialize an array to hold all releases fetched from the API.
                 let allReleases = [];
                 let page = 1;
-                const perPage = 100;
+                const perPage = 100; // Fetch 100 releases per page for efficiency.
 
+                // Loop to fetch all pages of releases from the GitHub API.
                 while (true) {
                     const apiUrl = `https://api.github.com/repos/Opentrons/opentrons/releases?page=${page}&per_page=${perPage}`;
                     const response = await fetch(apiUrl);
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
                     const releasesOnPage = await response.json();
+                    // If a page has no releases, we've reached the end.
                     if (releasesOnPage.length === 0) break;
+                    
                     allReleases = allReleases.concat(releasesOnPage);
                     page++;
                 }
                 
+                // Hide the loading spinner once all data is fetched.
                 loadingState.style.display = 'none';
 
-                const filteredReleases = allReleases.filter(release => release.tag_name.startsWith('v'));
+                // Filter the fetched releases based on specific criteria:
+                // 1. Tag name must start with 'v'.
+                // 2. Tag name must NOT include 'alpha'.
+                // 3. Tag name must NOT include 'beta'.
+                const filteredReleases = allReleases.filter(release => 
+                    release.tag_name.startsWith('v') && 
+                    !release.tag_name.includes('alpha') && 
+                    !release.tag_name.includes('beta')
+                );
 
+                // Iterate over each filtered release to create and append its HTML element.
                 filteredReleases.forEach(release => {
                     const listItem = document.createElement('li');
                     listItem.className = 'release-item border-b border-gray-200 last:border-b-0 py-2';
 
-                    // --- Main Release Info and Dropdown Button ---
+                    // --- Create the main header for the release item ---
                     const releaseHeader = document.createElement('div');
                     releaseHeader.className = 'flex justify-between items-center cursor-pointer p-2 rounded-md hover:bg-gray-100';
                     
                     const releaseInfoDiv = document.createElement('div');
                     
+                    // Create the link to the GitHub release page.
                     const link = document.createElement('a');
                     link.href = release.html_url;
                     link.textContent = release.tag_name;
@@ -90,6 +108,7 @@
                     link.rel = 'noopener noreferrer';
                     link.className = 'font-semibold text-xl text-blue-600 hover:underline release-tag';
                     
+                    // Format and display the publication date.
                     const date = new Date(release.published_at);
                     const dateSpan = document.createElement('span');
                     dateSpan.textContent = ` - Published on ${date.toLocaleDateString()}`;
@@ -98,7 +117,7 @@
                     releaseInfoDiv.appendChild(link);
                     releaseInfoDiv.appendChild(dateSpan);
 
-                    // Dropdown Arrow Icon
+                    // Create the dropdown arrow icon.
                     const arrowIcon = document.createElement('div');
                     arrowIcon.innerHTML = `<svg class="w-5 h-5 text-gray-500 transition-transform" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>`;
                     
@@ -106,15 +125,20 @@
                     releaseHeader.appendChild(arrowIcon);
                     listItem.appendChild(releaseHeader);
                     
-                    // --- Asset Links Container (hidden by default) ---
+                    // --- Create the container for asset download links (initially hidden) ---
                     const assetsContainer = document.createElement('div');
                     assetsContainer.className = 'assets-container hidden mt-2 pl-6 border-l-2 border-gray-200 ml-2';
 
+                    // Filter for relevant assets: app installers and robot system files.
                     const relevantAssets = release.assets.filter(asset => 
+                        asset.name.endsWith('.dmg') ||         // Mac App
+                        asset.name.endsWith('.exe') ||        // Windows App
+                        asset.name.endsWith('.AppImage') ||   // Linux App
                         (asset.name.startsWith('ot2-system') && asset.name.endsWith('.zip')) ||
                         (asset.name.startsWith('ot3-system') && asset.name.endsWith('.zip'))
-                    );
+                    ).sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically for consistency.
 
+                    // If relevant assets are found, create links for them.
                     if (relevantAssets.length > 0) {
                         relevantAssets.forEach(asset => {
                             const assetLink = document.createElement('a');
@@ -125,12 +149,12 @@
                         });
                         listItem.appendChild(assetsContainer);
                     } else {
-                        // If no assets, hide the arrow
+                        // If no assets are found, hide the dropdown arrow and remove the pointer cursor.
                         arrowIcon.classList.add('hidden');
                         releaseHeader.classList.remove('cursor-pointer');
                     }
 
-                    // ** NEW: Dropdown Click Listener **
+                    // Add click listener to the header to toggle the assets dropdown.
                     releaseHeader.addEventListener('click', () => {
                         if (relevantAssets.length > 0) {
                             assetsContainer.classList.toggle('hidden');
@@ -141,7 +165,7 @@
                     releasesList.appendChild(listItem);
                 });
 
-                // ** NEW: Search Bar Event Listener **
+                // Add an input event listener to the search bar for live filtering.
                 searchBar.addEventListener('input', (e) => {
                     const searchTerm = e.target.value.toLowerCase();
                     const allListItems = document.querySelectorAll('.release-item');
@@ -149,19 +173,21 @@
                     allListItems.forEach(item => {
                         const tagName = item.querySelector('.release-tag').textContent.toLowerCase();
                         if (tagName.includes(searchTerm)) {
-                            item.style.display = 'block';
+                            item.style.display = 'block'; // Show if it matches
                         } else {
-                            item.style.display = 'none';
+                            item.style.display = 'none'; // Hide if it doesn't
                         }
                     });
                 });
 
             } catch (error) {
+                // Display an error message if the fetch fails.
                 loadingState.innerHTML = `<p class="text-red-500 font-semibold">Failed to load releases.</p><p class="text-sm text-gray-500">${error.message}</p>`;
                 console.error('Error fetching releases:', error);
             }
         }
 
+        // Run the main function after the DOM is fully loaded.
         document.addEventListener('DOMContentLoaded', fetchAndDisplayReleases);
     </script>
 
